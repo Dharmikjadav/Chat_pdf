@@ -1,0 +1,65 @@
+# =============================================================================
+# Offline PDF Chatbot — Python dependencies
+# =============================================================================
+# Target: Python 3.10 – 3.12 on Windows (CPU or CUDA).
+# Everything here runs locally. No cloud APIs are used at runtime.
+#
+# NOTE on PyTorch (pulled in by marker-pdf):
+#   - CPU is installed automatically by the line below.
+#   - For NVIDIA GPU acceleration, install torch separately FIRST, e.g.:
+#       pip install torch --index-url https://download.pytorch.org/whl/cu121
+#     then run:  pip install -r requirements.txt
+# =============================================================================
+
+# --- PDF ingestion & rendering ------------------------------------------------
+pymupdf>=1.24.0          # fitz: page text, page-to-image rendering, metadata
+
+# --- Document OCR / layout / markdown conversion (replaces PaddleOCR) ---------
+marker-pdf>=1.2.0        # Marker: PDF -> Markdown, tables, figures, equations
+#                          (pulls in torch, transformers, surya-ocr, etc.)
+
+# --- Local LLM & Vision model (via Ollama) -----------------------------------
+ollama>=0.3.0            # Python client for local Ollama server
+
+# --- Workflow orchestration ---------------------------------------------------
+langgraph>=0.2.0         # Stateful graph pipeline
+langchain-core>=0.3.0    # Message / runnable primitives used by LangGraph
+
+# --- Structured output validation --------------------------------------------
+pydantic>=2.7.0          # JSON schema validation for vision/LLM output
+pydantic-settings>=2.3.0 # Typed settings loaded from .env
+json-repair>=0.30.0      # Repair malformed JSON emitted by local LLMs/vision
+
+# --- Markdown parsing ---------------------------------------------------------
+markdown-it-py>=3.0.0    # Parse Marker's Markdown into a structured tree
+mdit-py-plugins>=0.4.0   # Tables / front-matter / footnote plugins
+
+# --- Config & environment -----------------------------------------------------
+python-dotenv>=1.0.0     # Load .env into the environment
+
+# --- CLI / logging / progress -------------------------------------------------
+typer>=0.12.0            # CLI entry points
+rich>=13.7.0             # Pretty console output
+loguru>=0.7.2            # Structured logging to logs/
+tqdm>=4.66.0             # Progress bars for batch processing
+
+# --- Image handling (explicit; also a Marker transitive dep) ------------------
+pillow>=10.3.0
+
+# --- OpenCV region detection (pre-Marker stage) -------------------------------
+# CPU build from PyPI. GPU (cv2.cuda) needs an OpenCV built WITH CUDA, which is
+# NOT on PyPI — build from source or use a CUDA OpenCV wheel. Code auto-detects
+# cv2.cuda and falls back to CPU when absent.
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# --- API backend (FastAPI) ----------------------------------------------------
+fastapi>=0.110.0         # REST API exposing the pipeline
+uvicorn[standard]>=0.29.0  # ASGI server
+python-multipart>=0.0.9  # multipart/form-data PDF uploads
+
+# --- Optional local UI (offline, no telemetry needed) -------------------------
+streamlit>=1.36.0        # Simple offline chat UI (optional)
+
+# --- Testing ------------------------------------------------------------------
+pytest>=8.2.0

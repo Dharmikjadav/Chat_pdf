@@ -1,0 +1,916 @@
+{
+  "summary": {
+    "financial": [
+      7,
+      8
+    ],
+    "comparative": [
+      8,
+      8
+    ],
+    "chart": [
+      6,
+      8
+    ],
+    "text": [
+      5,
+      8
+    ],
+    "adversarial": [
+      3,
+      3
+    ]
+  },
+  "errors": {
+    "table_parsing_error": 1,
+    "missing_answer": 5
+  },
+  "results": [
+    {
+      "question": "What was Total income for FY16?",
+      "category": "financial",
+      "expected_value": "291,453",
+      "expected_page": 7,
+      "answer": "Total income  \nFY16: 291,453  \n(page 7)",
+      "source_pages": [
+        7,
+        7,
+        7
+      ],
+      "retrieved_pages": [
+        7,
+        7,
+        7,
+        7,
+        7,
+        8,
+        7,
+        8
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What was Net profit after minority interest for FY17?",
+      "category": "financial",
+      "expected_value": "69,644",
+      "expected_page": 7,
+      "answer": "Net profit after minority interest\nFY17: 69,644\n(page 7)",
+      "source_pages": [
+        7,
+        7,
+        7
+      ],
+      "retrieved_pages": [
+        7,
+        7,
+        7,
+        7,
+        7,
+        8,
+        7,
+        8
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What was R&D investment for FY18?",
+      "category": "financial",
+      "expected_value": "22,489",
+      "expected_page": 7,
+      "answer": "R&D investment\nFY18: 22,489\nunits: (₹ Million)\n(page 7)",
+      "source_pages": [
+        7,
+        7,
+        7
+      ],
+      "retrieved_pages": [
+        7,
+        7,
+        7,
+        7,
+        7,
+        8,
+        7,
+        8
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What was Other equity for FY19?",
+      "category": "financial",
+      "expected_value": "411,691",
+      "expected_page": 7,
+      "answer": "Other equity\nFY19: 411,691\n(page 7)",
+      "source_pages": [
+        7,
+        7,
+        7
+      ],
+      "retrieved_pages": [
+        7,
+        7,
+        7,
+        7,
+        7,
+        8,
+        7,
+        8
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What was Carrying value of property, plant & equipment and other intangible assets** for FY20?",
+      "category": "financial",
+      "expected_value": "175,858",
+      "expected_page": 7,
+      "answer": "Carrying value of property, plant & equipment and other intangible assets**  \nFY20: 175,858  \nunits: (₹ Million)  \n(page 7)",
+      "source_pages": [
+        7,
+        7,
+        8
+      ],
+      "retrieved_pages": [
+        7,
+        7,
+        8,
+        236,
+        30,
+        154,
+        158,
+        176
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What was Earning per share for FY21?",
+      "category": "financial",
+      "expected_value": "12.1",
+      "expected_page": 7,
+      "answer": "Earning per share (adjusted for bonus/split)*  \nFY21: 12.1  \n(page 7)",
+      "source_pages": [
+        7,
+        34,
+        32
+      ],
+      "retrieved_pages": [
+        7,
+        34,
+        32,
+        37,
+        7,
+        7,
+        7,
+        7
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What was US Sales Growth for FY21?",
+      "category": "financial",
+      "expected_value": "101",
+      "expected_page": 32,
+      "answer": "US Sales Growth\nFY21: 101\nunits: (₹ in Billion)\n(page 32)",
+      "source_pages": [
+        32,
+        34,
+        37
+      ],
+      "retrieved_pages": [
+        32,
+        34,
+        37,
+        7,
+        7,
+        7,
+        7,
+        7
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What was R&D Investments* for FY22?",
+      "category": "financial",
+      "expected_value": "5.8",
+      "expected_page": 37,
+      "answer": "R&D investment\nFY22: 22,194\n(page 7)",
+      "source_pages": [
+        37,
+        32,
+        34
+      ],
+      "retrieved_pages": [
+        37,
+        32,
+        34,
+        7,
+        7,
+        7,
+        7,
+        7
+      ],
+      "node_rank": 1,
+      "correct": false,
+      "error": "table_parsing_error",
+      "format_ok": true
+    },
+    {
+      "question": "Compare Total income between FY24 and FY25.",
+      "category": "comparative",
+      "expected_value": "545,435",
+      "expected_page": 7,
+      "answer": "Total income\nFY24: 498,510 | FY25: 545,435\nunits: (₹ Million)\n(page 7)",
+      "source_pages": [
+        7,
+        30,
+        30
+      ],
+      "retrieved_pages": [
+        7,
+        30,
+        30,
+        30,
+        30,
+        30,
+        32,
+        30
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "Compare Net profit after minority interest between FY24 and FY25.",
+      "category": "comparative",
+      "expected_value": "109,290",
+      "expected_page": 7,
+      "answer": "Net profit after minority interest\nFY24: 95,764 | FY25: 109,290\nunits: (₹ Million)\n(page 7)",
+      "source_pages": [
+        7,
+        30,
+        30
+      ],
+      "retrieved_pages": [
+        7,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "Compare R&D investment between FY24 and FY25.",
+      "category": "comparative",
+      "expected_value": "32,484",
+      "expected_page": 7,
+      "answer": "R&D investment\nFY24: 31,776 | FY25: 32,484\nunits: (₹ Million)\n(page 7)",
+      "source_pages": [
+        7,
+        30,
+        30
+      ],
+      "retrieved_pages": [
+        7,
+        30,
+        30,
+        30,
+        30,
+        30,
+        32,
+        30
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "Compare Other equity between FY24 and FY25.",
+      "category": "comparative",
+      "expected_value": "719,781",
+      "expected_page": 7,
+      "answer": "Other equity  \nFY24: 634,268 | FY25: 719,781  \nunits: (₹ Million)  \n(page 7)",
+      "source_pages": [
+        7,
+        30,
+        7
+      ],
+      "retrieved_pages": [
+        7,
+        30,
+        7,
+        30,
+        30,
+        30,
+        30,
+        32
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "Compare Carrying value of property, plant & equipment and other intangible assets** between FY24 and FY25.",
+      "category": "comparative",
+      "expected_value": "202,908",
+      "expected_page": 7,
+      "answer": "Carrying value of property, plant & equipment and other intangible assets**\nFY24: 200330 | FY25: 202908\nunits: (₹ Million)\n(page 7)",
+      "source_pages": [
+        7,
+        30,
+        7
+      ],
+      "retrieved_pages": [
+        7,
+        30,
+        7,
+        30,
+        8,
+        51,
+        236,
+        176
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "Compare Earning per share between FY24 and FY25.",
+      "category": "comparative",
+      "expected_value": "45.6",
+      "expected_page": 7,
+      "answer": "Earning per share\n(adjusted for bonus/split)*\nFY24: 39.9 | FY25: 45.6\nunits: (₹ per share)\n(page 7)",
+      "source_pages": [
+        30,
+        7,
+        30
+      ],
+      "retrieved_pages": [
+        30,
+        7,
+        30,
+        34,
+        30,
+        30,
+        30,
+        30
+      ],
+      "node_rank": 2,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "Compare Adjusted net profit after minority interests# between FY24 and FY25.",
+      "category": "comparative",
+      "expected_value": "120",
+      "expected_page": 30,
+      "answer": "Adjusted net profit after minority interests#\nFY24: 101\nFY25: 120\nunits: (₹ in Billion)\n(page 30)",
+      "source_pages": [
+        30,
+        7,
+        30
+      ],
+      "retrieved_pages": [
+        30,
+        7,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "Compare Book value per share between FY24 and FY25.",
+      "category": "comparative",
+      "expected_value": "301.0",
+      "expected_page": 30,
+      "answer": "Book value per share\nFY24: 265.4 | FY25: 301.0\nunits: (₹ per share)\n(page 30)",
+      "source_pages": [
+        30,
+        30,
+        7
+      ],
+      "retrieved_pages": [
+        30,
+        30,
+        7,
+        34,
+        7,
+        30,
+        30,
+        30
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What does the chart titled 'Key Trends' show?",
+      "category": "chart",
+      "expected_value": null,
+      "expected_page": 19,
+      "answer": "Key Trends\npopulation growth rate: 0.1%\n(page 19)",
+      "source_pages": [
+        19,
+        6,
+        6
+      ],
+      "retrieved_pages": [
+        19,
+        6,
+        6,
+        19,
+        3,
+        3,
+        5,
+        107
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What does the chart titled 'Road Ahead' show?",
+      "category": "chart",
+      "expected_value": null,
+      "expected_page": 37,
+      "answer": "- chart: Road Ahead\n- Focus on developing complex products across multiple dosage forms: None\n- Invest to further build the specialty pipeline: None\n- Continue to focus on supporting the formulations business through the development of strategic APIs: None\n- Ensure consistent supplies and high service standards for customers: None\n- Focus on developing complex products across multiple dosage forms: None\n- Invest to further build the specialty pipeline: None\n(page 37)",
+      "source_pages": [
+        37,
+        37,
+        37
+      ],
+      "retrieved_pages": [
+        37,
+        37,
+        37,
+        36,
+        6,
+        6,
+        3,
+        3
+      ],
+      "node_rank": 2,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What does the chart titled 'Road Ahead' show?",
+      "category": "chart",
+      "expected_value": null,
+      "expected_page": 37,
+      "answer": "Road Ahead  \nFocus on developing complex products across multiple dosage forms: None  \nInvest to further build the specialty pipeline: None  \nContinue to focus on supporting the formulations business through the development of strategic APIs: None  \nEnsure consistent supplies and high service standards for customers: None  \n(page 37)",
+      "source_pages": [
+        37,
+        37,
+        37
+      ],
+      "retrieved_pages": [
+        37,
+        37,
+        37,
+        36,
+        6,
+        6,
+        3,
+        3
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What does the chart titled 'Approval of the Questionnaire by NRC' show?",
+      "category": "chart",
+      "expected_value": null,
+      "expected_page": 44,
+      "answer": "Not found in the document.",
+      "source_pages": [
+        44,
+        44,
+        44
+      ],
+      "retrieved_pages": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        317,
+        80,
+        44
+      ],
+      "node_rank": 1,
+      "correct": false,
+      "error": "missing_answer",
+      "format_ok": true
+    },
+    {
+      "question": "What does the chart titled 'Kickstart of PEP and circulation of Questionnaire' show?",
+      "category": "chart",
+      "expected_value": null,
+      "expected_page": 44,
+      "answer": "Kickstart of PEP and circulation of Questionnaire\nKickstart of PEP: null\ncirculation of Questionnaire: null\n(page 44)",
+      "source_pages": [
+        44,
+        44,
+        44
+      ],
+      "retrieved_pages": [
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        44,
+        6
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What does the chart titled 'Questionnaire Response Period' show?",
+      "category": "chart",
+      "expected_value": null,
+      "expected_page": 44,
+      "answer": "Questionnaire Response Period\nQuestionnaire Response Period: None\n(page 44)",
+      "source_pages": [
+        44,
+        44,
+        44
+      ],
+      "retrieved_pages": [
+        44,
+        44,
+        44,
+        44,
+        6,
+        6,
+        3,
+        3
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What does the chart titled 'Compilation of responses sharing the report with NRC Chair' show?",
+      "category": "chart",
+      "expected_value": null,
+      "expected_page": 44,
+      "answer": "Compilation of responses sharing the report with NRC Chair  \nkey: value  \nCompilation of responses sharing the report with NRC Chair: None  \n(page 44)",
+      "source_pages": [
+        44,
+        44,
+        44
+      ],
+      "retrieved_pages": [
+        44,
+        44,
+        44,
+        44,
+        80,
+        44,
+        44,
+        6
+      ],
+      "node_rank": 1,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What does the chart titled 'Interactions of NRC Chair with individual Directors' show?",
+      "category": "chart",
+      "expected_value": null,
+      "expected_page": 44,
+      "answer": "Not found in the document.",
+      "source_pages": [
+        44,
+        44,
+        44
+      ],
+      "retrieved_pages": [
+        44,
+        44,
+        44,
+        44,
+        80,
+        317,
+        76,
+        318
+      ],
+      "node_rank": 1,
+      "correct": false,
+      "error": "missing_answer",
+      "format_ok": true
+    },
+    {
+      "question": "What are the key business segments of the company?",
+      "category": "text",
+      "expected_value": null,
+      "expected_page": null,
+      "answer": "OTC Medicines  \nActive Pharmaceutical Ingredients (APIs)  \nGeneric and Branded Generic Medicines  \nGlobal Specialty Business  \n(page 6)  \n(page 26)",
+      "source_pages": [
+        6,
+        26
+      ],
+      "retrieved_pages": [
+        6,
+        26,
+        33,
+        116,
+        117,
+        320,
+        40,
+        134
+      ],
+      "node_rank": null,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What is the total employee count?",
+      "category": "text",
+      "expected_value": null,
+      "expected_page": null,
+      "answer": "Not found in the document.",
+      "source_pages": [
+        100
+      ],
+      "retrieved_pages": [
+        100,
+        38,
+        24,
+        151,
+        95,
+        181,
+        274,
+        227
+      ],
+      "node_rank": null,
+      "correct": false,
+      "error": "missing_answer",
+      "format_ok": true
+    },
+    {
+      "question": "What is the company's R&D expenditure?",
+      "category": "text",
+      "expected_value": null,
+      "expected_page": null,
+      "answer": "Not found in the document.",
+      "source_pages": [
+        20
+      ],
+      "retrieved_pages": [
+        20,
+        21,
+        22,
+        26,
+        109,
+        73,
+        63,
+        37
+      ],
+      "node_rank": null,
+      "correct": false,
+      "error": "missing_answer",
+      "format_ok": true
+    },
+    {
+      "question": "What was revenue from operations?",
+      "category": "text",
+      "expected_value": null,
+      "expected_page": null,
+      "answer": "Not found in the document.",
+      "source_pages": [
+        205
+      ],
+      "retrieved_pages": [
+        205,
+        121,
+        124,
+        166,
+        31,
+        35,
+        123,
+        260
+      ],
+      "node_rank": null,
+      "correct": false,
+      "error": "missing_answer",
+      "format_ok": true
+    },
+    {
+      "question": "What is the dividend per share?",
+      "category": "text",
+      "expected_value": null,
+      "expected_page": null,
+      "answer": "Dividend per Equity Share in ₹: 16  \n(page 41)",
+      "source_pages": [
+        42,
+        41
+      ],
+      "retrieved_pages": [
+        42,
+        41,
+        191,
+        42,
+        276,
+        325,
+        30,
+        30
+      ],
+      "node_rank": null,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "Who is the chairman of the company?",
+      "category": "text",
+      "expected_value": null,
+      "expected_page": null,
+      "answer": "Mr. Dilip Shanghvi  \n(page 321)",
+      "source_pages": [
+        321
+      ],
+      "retrieved_pages": [
+        321,
+        91,
+        82,
+        320,
+        81,
+        317,
+        318,
+        63
+      ],
+      "node_rank": null,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What is the company's market presence or geographic reach?",
+      "category": "text",
+      "expected_value": null,
+      "expected_page": null,
+      "answer": "Over 100 countries, including Western Europe, Canada, Australia & New Zealand, Japan, Israel, and others. (page 24)",
+      "source_pages": [
+        35,
+        24
+      ],
+      "retrieved_pages": [
+        35,
+        24,
+        26,
+        33,
+        4,
+        23,
+        25,
+        6
+      ],
+      "node_rank": null,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What are the company's main therapeutic areas?",
+      "category": "text",
+      "expected_value": null,
+      "expected_page": null,
+      "answer": "India Business Therapeutic Revenue Break-up (%)  \nNeuropsychiatry: 20  \nCardiology: 17  \nGastroenterology: 14  \nDiabetology: 8  \nPain/Analgesics: 7  \nAnti-infectives: 6  \nRespiratory: 5  \nVitamins/Minerals/Nutrients: 5  \nDermatology: 4  \nGynaecology: 4  \nUrology: 3  \nOphthalmology: 3  \nOthers: 4  \n(page 33)",
+      "source_pages": [
+        6,
+        33
+      ],
+      "retrieved_pages": [
+        6,
+        33,
+        117,
+        32,
+        4,
+        116,
+        22,
+        125
+      ],
+      "node_rank": null,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What is the CEO of Microsoft?",
+      "category": "adversarial",
+      "expected_value": "__NOT_FOUND__",
+      "expected_page": null,
+      "answer": "Not found in the document.",
+      "source_pages": [
+        83
+      ],
+      "retrieved_pages": [
+        83
+      ],
+      "node_rank": null,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What was the GDP of France in 2010?",
+      "category": "adversarial",
+      "expected_value": "__NOT_FOUND__",
+      "expected_page": null,
+      "answer": "Not found in the document.",
+      "source_pages": [
+        309
+      ],
+      "retrieved_pages": [
+        309,
+        310,
+        325,
+        25,
+        84,
+        144,
+        263,
+        21
+      ],
+      "node_rank": null,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    },
+    {
+      "question": "What is the price of Bitcoin today?",
+      "category": "adversarial",
+      "expected_value": "__NOT_FOUND__",
+      "expected_page": null,
+      "answer": "Not found in the document.",
+      "source_pages": [
+        298,
+        298
+      ],
+      "retrieved_pages": [
+        298,
+        298,
+        214,
+        201,
+        21,
+        166,
+        244,
+        286
+      ],
+      "node_rank": null,
+      "correct": true,
+      "error": null,
+      "format_ok": true
+    }
+  ]
+}

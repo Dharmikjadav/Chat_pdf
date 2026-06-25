@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./venv/Scripts/python.exe -c ' *)",
+      "Bash(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 ./venv/Scripts/python.exe -c ' *)",
+      "Bash(OLLAMA_CHAT_MODEL=gemma3:12b PYTHONIOENCODING=utf-8 ./venv/Scripts/python.exe -c ' *)"
+    ]
+  }
+}

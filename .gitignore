@@ -1,0 +1,27 @@
+# --- Environment ---
+.env
+.venv/
+venv/
+env/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Local data & artifacts (keep the folders, ignore contents) ---
+data/raw_pdfs/*
+data/processed/*
+data/images/*
+data/pageindex/*
+models/*
+logs/*
+!**/.gitkeep
+
+# --- OS / IDE ---
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
