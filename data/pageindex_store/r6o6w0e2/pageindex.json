@@ -28370,6 +28370,7 @@
           "series": [
             {
               "name": null,
+              "axis": null,
               "points": [
                 {
                   "label": "FY 2024-25",
@@ -28384,7 +28385,10 @@
               ]
             }
           ],
+          "totals": [],
+          "side_table": [],
           "legend": [],
+          "notes": null,
           "n_series": 1,
           "n_points": 2
         }

@@ -1,18 +1,22 @@
 """Filesystem helpers: UUIDs, PDF validation, streamed upload save, safe delete."""
 
+import random
 import re
 import shutil
-import uuid
+import string
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
 
 _CHUNK = 1024 * 1024  # 1 MiB
+_DOC_ID_RNG = random.SystemRandom()  # os.urandom-backed: unguessable, no global-seed interference
 
 
 def new_doc_id() -> str:
-    """Generate a fresh document id."""
-    return str(uuid.uuid4())
+    """Generate a fresh 8-char document id: 4 lowercase letters + 4 digits in shuffled order (e.g. '5f8gg65t')."""
+    chars = _DOC_ID_RNG.choices(string.ascii_lowercase, k=4) + _DOC_ID_RNG.choices(string.digits, k=4)
+    _DOC_ID_RNG.shuffle(chars)
+    return "".join(chars)
 
 
 def now_iso() -> str:

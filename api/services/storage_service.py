@@ -95,7 +95,9 @@ def compute_progress(stage: str, current_page: int, total_pages: int) -> float:
     idx = STAGE_ORDER.index(stage) if stage in STAGE_ORDER else 0
     end = STAGE_START[STAGE_ORDER[idx + 1]] if idx + 1 < len(STAGE_ORDER) else 100.0
     frac = min(1.0, max(0.0, current_page / total_pages)) if total_pages else 0.0
-    return round(min(100.0, max(0.0, start + (end - start) * frac)), 2)
+    # Cap in-progress at 99%: 100% is reserved for the 'completed' stage so the bar never reads
+    # "done" while the pipeline is still running (the last stage's band would otherwise hit 100).
+    return round(min(99.0, max(0.0, start + (end - start) * frac)), 2)
 
 
 # --- status JSON mirror ---------------------------------------------------- #

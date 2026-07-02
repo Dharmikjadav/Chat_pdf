@@ -403,8 +403,36 @@ def _is_series_obj(value: Any) -> bool:
 def _one_series(value: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "name": _to_str_or_none(_get(value, ["name", "label", "title"])),
+        "axis": _to_str_or_none(_get(value, ["axis", "yaxis", "y_axis_side"])),
         "points": _coerce_points(_get(value, ["points", "data", "values", "series"])),
     }
+
+
+def _coerce_totals(raw: Any) -> List[Dict[str, Any]]:
+    """Per-bar totals printed above stacked/grouped bars."""
+    out: List[Dict[str, Any]] = []
+    for item in raw if isinstance(raw, list) else []:
+        if isinstance(item, dict):
+            out.append({
+                "label": _to_str_or_none(_get(item, ["label", "category", "name", "x"])),
+                "value": _norm_cell(_get(item, ["value", "total", "y", "amount"])),
+                "unit": _to_str_or_none(_get(item, ["unit", "units"])),
+            })
+    return out
+
+
+def _coerce_side_table(raw: Any) -> List[Dict[str, Any]]:
+    """An adjacent data/legend column printed beside the chart (e.g. a CAGR % column)."""
+    out: List[Dict[str, Any]] = []
+    for item in raw if isinstance(raw, list) else []:
+        if isinstance(item, dict):
+            out.append({
+                "name": _to_str_or_none(_get(item, ["name", "label", "category", "region"])),
+                "metric": _to_str_or_none(_get(item, ["metric", "column", "header", "key"])),
+                "value": _norm_cell(_get(item, ["value", "y", "amount"])),
+                "unit": _to_str_or_none(_get(item, ["unit", "units"])),
+            })
+    return out
 
 
 def _coerce_series(raw: Any) -> List[Dict[str, Any]]:
@@ -460,11 +488,29 @@ def normalize_chart_json(data: Any) -> Dict[str, Any]:
             chart_type = candidate
 
     series = _coerce_series(_get(data, ["series", "datasets", "data", "values"]))
+    for sd in series:  # guarantee the axis key on every series (fallback branches omit it)
+        sd.setdefault("axis", None)
     legend = _get(data, ["legend", "legends", "keys"])
     if legend is None:
         legend = []
     elif not isinstance(legend, list):
         legend = [legend]
+
+    totals = _coerce_totals(_get(data, ["totals", "bar_totals", "column_totals"]))
+    side_table = _coerce_side_table(_get(data, ["side_table", "side_column", "data_column"]))
+    notes = _to_str_or_none(_get(data, ["notes", "note", "footnote"]))
+
+    # Project per-bar totals and the side data column into series so the existing text/fact renderers
+    # (pageindex._chart_to_text, fact_generator._chart_facts) index them with no further change.
+    if totals:
+        series.append({"name": "Total", "axis": None,
+                       "points": [{"label": t["label"], "value": t["value"], "unit": t["unit"]} for t in totals]})
+    by_metric: Dict[str, List[Dict[str, Any]]] = {}
+    for r in side_table:
+        by_metric.setdefault(r.get("metric") or "side", []).append(
+            {"label": r.get("name"), "value": r.get("value"), "unit": r.get("unit")})
+    for metric, pts in by_metric.items():
+        series.append({"name": metric, "axis": None, "points": pts})
 
     return {
         "type": "chart",
@@ -473,7 +519,10 @@ def normalize_chart_json(data: Any) -> Dict[str, Any]:
         "x_axis": _coerce_axis(_get(data, ["x_axis", "xaxis", "x", "horizontal_axis", "x_label"])),
         "y_axis": _coerce_axis(_get(data, ["y_axis", "yaxis", "y", "vertical_axis", "y_label"])),
         "series": series,
+        "totals": totals,
+        "side_table": side_table,
         "legend": [_to_str_or_none(item) for item in legend],
+        "notes": notes,
         "n_series": len(series),
         "n_points": sum(len(item["points"]) for item in series),
     }

@@ -93,23 +93,116 @@ def classify_pages(state: PDFPipelineState) -> Dict[str, Any]:
     return _classify_pages(state)
 
 
-def _text_node(document_name, page, text, *, origin, page_class) -> Dict[str, Any]:
+def _text_node(document_name, page, text, *, origin, page_class, idx=0, title=None) -> Dict[str, Any]:
+    suffix = "text" if idx == 0 else f"s{idx:02d}"
     return {
-        "id": f"{_slug(document_name)}-p{(page or 0):03d}-text",
+        "id": f"{_slug(document_name)}-p{(page or 0):03d}-{suffix}",
         "document_name": document_name,
         "page_number": page,
         "source": document_name,
         "element_type": "text",
         "content": text,
+        "title": title,
         "data": None,
         "bbox": None,
         "confidence": 1.0 if origin == "pymupdf_text" else 0.9,
-        "metadata": {"origin": origin, "page_class": page_class},
+        "metadata": {"origin": origin, "page_class": page_class, "section": title},
     }
 
 
+def _split_sections(page) -> List[Tuple[Optional[str], str]]:
+    """Split a page's prose into ordered (heading, content) sections using font cues.
+
+    A line is treated as a heading when its font is clearly larger than the page's body font, or it
+    is bold, short, and at least body size. Each section's content includes its heading line so the
+    heading is searchable in both the boosted title and the body. A page with no detectable headings
+    returns a single (None, full_text) section, so plain pages behave exactly as before."""
+    try:
+        info = page.get_text("dict")
+    except Exception:  # noqa: BLE001 - fall back to flat text on any extraction issue
+        return []
+    lines: List[Tuple[float, bool, str]] = []
+    for block in info.get("blocks") or []:
+        if block.get("type") != 0:  # text blocks only
+            continue
+        for ln in block.get("lines") or []:
+            spans = ln.get("spans") or []
+            text = "".join(s.get("text", "") for s in spans).strip()
+            if not text:
+                continue
+            size = max((float(s.get("size", 0.0)) for s in spans), default=0.0)
+            bold = any(int(s.get("flags", 0)) & 16 for s in spans)
+            lines.append((round(size, 1), bold, text))
+    if not lines:
+        return []
+    from collections import Counter
+
+    body = Counter(sz for sz, _, _ in lines).most_common(1)[0][0] or 1.0
+
+    def is_heading(sz: float, bold: bool, text: str) -> bool:
+        if len(text) > 110 or text.endswith((".", ",", ";", ":")) and len(text) > 70:
+            return False
+        return sz >= body * 1.15 or (bold and sz >= body and len(text) <= 70)
+
+    sections: List[Tuple[Optional[str], List[str]]] = []
+    cur_title: Optional[str] = None
+    cur_body: List[str] = []
+    for sz, bold, text in lines:
+        if is_heading(sz, bold, text):
+            if cur_title is not None or cur_body:
+                sections.append((cur_title, cur_body))
+            cur_title, cur_body = text, [text]
+        else:
+            cur_body.append(text)
+    if cur_title is not None or cur_body:
+        sections.append((cur_title, cur_body))
+
+    raw: List[Tuple[Optional[str], str]] = []
+    for title, body_lines in sections:
+        content = "\n".join(body_lines).strip()
+        if content:
+            raw.append((title, content))
+
+    # Merge fragments (labels, table cells, page numbers, signatures) into the substantial prose
+    # section they belong to, so only real headings with real bodies become separate nodes. A page
+    # made entirely of fragments (a table/KPI page) collapses back to a single node, as before.
+    min_section = 160
+    merged: List[Tuple[Optional[str], str]] = []
+    buf_title: Optional[str] = None
+    buf: List[str] = []
+    for title, content in raw:
+        if title is not None and len(content) >= min_section:  # a real section begins
+            if buf:
+                merged.append((buf_title, "\n".join(buf).strip()))
+            buf_title, buf = title, [content]
+        else:  # fragment -> attach to the section currently being accumulated
+            if not buf and title is not None:
+                buf_title = title
+            buf.append(content)
+    if buf:
+        merged.append((buf_title, "\n".join(buf).strip()))
+    return merged
+
+
+def _section_is_prose(content: str) -> bool:
+    """True if a section carries real words (headings/navigation/notes), not just table numbers.
+
+    Used to recover meaningful text from chart/table pages (e.g. a 'What's inside' contents page or
+    a chart caption) without duplicating the pure numeric cells already captured as table data."""
+    words = content.split()
+    if not words:
+        return False
+    alpha = sum(1 for w in words if sum(ch.isalpha() for ch in w) >= 2)
+    return alpha >= 8 and alpha >= 0.3 * len(words)
+
+
 def extract_text_only_pages(state: PDFPipelineState) -> Dict[str, Any]:
-    """text_nodes: PyMuPDF text for text/mixed pages, Qwen2.5-VL OCR for scanned pages."""
+    """text_nodes: PyMuPDF text (split into heading sections) for text/mixed pages, OCR for scanned.
+
+    Chart/table pages also contribute their real prose sections (TOC, headings, captions, notes) so
+    navigational text is never lost; pure numeric table content is filtered out (kept as table data)."""
+    import fitz  # lazy
+
     classes = {pc.get("page_number"): pc.get("page_class") for pc in state.get("page_classes") or []}
     texts = {pt.get("page_number"): pt.get("text", "") for pt in state.get("page_texts") or []}
     document_name = state.get("document_name")
@@ -117,39 +210,60 @@ def extract_text_only_pages(state: PDFPipelineState) -> Dict[str, Any]:
     new_nodes: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
 
-    total = len(state.get("page_metadata") or [])
-    for meta in state.get("page_metadata") or []:
-        page = meta.get("page_number")
-        report_progress("page_classification", page, total, "extracting text")
-        page_class = classes.get(page, "mixed_page")
-        if page_class in ("text_only", "mixed_page", "kpi_page", "image_heavy_page"):
-            text = (texts.get(page) or "").strip()
-            if text:
-                new_nodes.append(_text_node(document_name, page, text, origin="pymupdf_text", page_class=page_class))
-        elif page_class == "scanned_page":
-            image_path = _page_image_path(state, page)
-            if not image_path:
-                errors.append({"stage": "vision", "message": "no page image for scanned OCR", "page_number": page})
-                continue
-
-            from utils.surya_ocr import ocr_image
-
-            text = ocr_image(image_path).strip()
-            origin = "surya_ocr"
-            if not text:  # Surya disabled/failed -> Qwen2.5-VL OCR
-                from nodes.ollama_vision_node import extract_text
-
-                result = extract_text(image_path, model=ocr_model)
-                if isinstance(result, dict) and "error" in result:
-                    errors.append({"stage": "vision", "message": result["error"], "page_number": page, "exception_type": result.get("error_type")})
+    pdf_path = state.get("pdf_path")
+    doc = fitz.open(pdf_path) if pdf_path else None
+    sectioned = 0
+    try:
+        total = len(state.get("page_metadata") or [])
+        for meta in state.get("page_metadata") or []:
+            page = meta.get("page_number")
+            report_progress("page_classification", page, total, "extracting text")
+            page_class = classes.get(page, "mixed_page")
+            is_full_text = page_class in ("text_only", "mixed_page", "kpi_page", "image_heavy_page")
+            is_data = page_class in ("table_page", "chart_page")
+            if is_full_text or is_data:
+                sections = _split_sections(doc.load_page(page - 1)) if (doc is not None and meta.get("has_text_layer")) else []
+                if is_data:  # data page: keep only real prose, never duplicate pure table numbers
+                    sections = [(t, c) for (t, c) in sections if _section_is_prose(c)]
+                if is_full_text and len(sections) <= 1:
+                    # plain page with no real headings -> one node for the whole page (unchanged behavior)
+                    text = (texts.get(page) or "").strip()
+                    if text:
+                        new_nodes.append(_text_node(document_name, page, text, origin="pymupdf_text", page_class=page_class))
+                elif sections:  # one node per heading (multi-section pages, or recovered chart/table prose)
+                    if len(sections) > 1:
+                        sectioned += 1
+                    for i, (title, content) in enumerate(sections):
+                        new_nodes.append(_text_node(document_name, page, content, origin="pymupdf_text",
+                                                    page_class=page_class, idx=i, title=title))
+            elif page_class == "scanned_page":
+                image_path = _page_image_path(state, page)
+                if not image_path:
+                    errors.append({"stage": "vision", "message": "no page image for scanned OCR", "page_number": page})
                     continue
-                text = (result if isinstance(result, str) else "").strip()
-                origin = "vision_ocr"
-            if text:
-                new_nodes.append(_text_node(document_name, page, text, origin=origin, page_class=page_class))
-        # table_page / chart_page: prose skipped; their data comes from crops
 
-    logger.info("extract_text_only_pages: %d text node(s), %d error(s)", len(new_nodes), len(errors))
+                from utils.surya_ocr import ocr_image
+
+                text = ocr_image(image_path).strip()
+                origin = "surya_ocr"
+                if not text:  # Surya disabled/failed -> Qwen2.5-VL OCR
+                    from nodes.ollama_vision_node import extract_text
+
+                    result = extract_text(image_path, model=ocr_model)
+                    if isinstance(result, dict) and "error" in result:
+                        errors.append({"stage": "vision", "message": result["error"], "page_number": page, "exception_type": result.get("error_type")})
+                        continue
+                    text = (result if isinstance(result, str) else "").strip()
+                    origin = "vision_ocr"
+                if text:
+                    new_nodes.append(_text_node(document_name, page, text, origin=origin, page_class=page_class))
+            # table_page / chart_page: prose skipped; their data comes from crops
+    finally:
+        if doc is not None:
+            doc.close()
+
+    logger.info("extract_text_only_pages: %d text node(s) (%d page(s) split into sections), %d error(s)",
+                len(new_nodes), sectioned, len(errors))
     return {"text_nodes": list(state.get("text_nodes") or []) + new_nodes, "errors": errors}
 
 
@@ -254,8 +368,80 @@ def _data_regions(words, regions, dpi) -> List[Dict[str, Any]]:
     return kept
 
 
+def _column_gutter(words, page_width_pts) -> Optional[float]:
+    """Return the split x (PDF points) for a genuine two-column page, else None.
+
+    A two-column page has a NARROW empty vertical gutter near the centre with real content on BOTH
+    sides. We merge word x-intervals and pick the widest central gap; require gutter 2-20% of width
+    and content >=8% on each side (so single-column pages with an empty margin are NOT split)."""
+    W = float(page_width_pts or 0)
+    if not words or W <= 0:
+        return None
+    intervals = sorted((float(w[0]), float(w[2])) for w in words if w[2] > w[0])
+    if not intervals:
+        return None
+    merged = [list(intervals[0])]
+    for a, b in intervals[1:]:
+        if a <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    lo, hi = W * 0.30, W * 0.70
+    best = None
+    for i in range(len(merged) - 1):
+        g0, g1 = merged[i][1], merged[i + 1][0]
+        if lo <= (g0 + g1) / 2 <= hi and (best is None or (g1 - g0) > best[1] - best[0]):
+            best = (g0, g1)
+    if not best or not (W * 0.02 <= best[1] - best[0] <= W * 0.20):
+        return None
+    left = sum(b - a for a, b in merged if b <= best[0])
+    right = sum(b - a for a, b in merged if a >= best[1])
+    if left < W * 0.08 or right < W * 0.08:
+        return None
+    return (best[0] + best[1]) / 2.0
+
+
+def _detect_split_page(image_path, page, split_px, words, dpi, detect_fn, debug, debug_dir):
+    """Detect regions on a two-column page by splitting it into left/right single-column halves and
+    running the normal OpenCV detector + data-region filter on EACH half in the half's own coordinate
+    space (so nothing crosses the gutter), then mapping boxes back to full-page coordinates."""
+    from PIL import Image
+
+    img = Image.open(image_path)
+    W, H = img.size
+    sc = 72.0 / float(dpi or 200)  # image px -> PDF points
+    regions: List[Dict[str, Any]] = []
+    gpu = False
+    for x0, x1 in ((0, int(split_px)), (int(split_px), W)):
+        if x1 - x0 < 40:
+            continue
+        x0_pt, x1_pt = x0 * sc, x1 * sc
+        half_words = [(w[0] - x0_pt, w[1], w[2] - x0_pt, w[3]) + tuple(w[4:])
+                      for w in words if x0_pt - 2 <= w[0] < x1_pt]
+        tmp = str(Path(image_path).with_name(f"{Path(image_path).stem}_half{x0}.png"))
+        try:
+            img.crop((x0, 0, x1, H)).save(tmp)
+            res = detect_fn(tmp, page_number=page, debug=debug, debug_dir=debug_dir)
+            gpu = gpu or bool(res.get("gpu"))
+            for r in _data_regions(half_words, res.get("regions", []), dpi):
+                b = r["bbox"]
+                regions.append(dict(r, bbox=[b[0] + x0, b[1], b[2] + x0, b[3]]))
+        except Exception:  # noqa: BLE001 - a half that fails just contributes no regions
+            logger.exception("split-half detection failed on page %s", page)
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+    return {"page": page, "regions": regions, "gpu": gpu, "two_column": True}
+
+
 def opencv_detect_regions(state: PDFPipelineState) -> Dict[str, Any]:
-    """Stage 1b: detect table/chart/kpi/visual regions, then keep only data-bearing ones."""
+    """Stage 1b: detect table/chart/kpi/visual regions, then keep only data-bearing ones.
+
+    Two-column pages are split at their gutter into single-column halves and run through the normal
+    detector per half (so side-by-side tables are detected separately, like single-column pages),
+    then boxes are mapped back to the full page. Single-column pages take the normal path unchanged."""
     try:
         from nodes.opencv_region_detector import detect_page_regions  # lazy: cv2
     except ImportError as exc:
@@ -287,13 +473,25 @@ def opencv_detect_regions(state: PDFPipelineState) -> Dict[str, Any]:
                 page_regions.append({"page": page, "regions": [], "skipped": "text_only"})
                 continue
             try:
-                result = detect_page_regions(image["image_path"], page_number=page, debug=debug, debug_dir=debug_dir)
-                # On a page with a text layer, drop prose/decorative regions (keep only data).
-                if doc is not None and (meta_by_page.get(page) or {}).get("has_text_layer") and result.get("regions"):
-                    before = len(result["regions"])
-                    words = doc.load_page(page - 1).get_text("words")
-                    result["regions"] = _data_regions(words, result["regions"], image.get("dpi"))
-                    dropped += before - len(result["regions"])
+                has_text = bool((meta_by_page.get(page) or {}).get("has_text_layer"))
+                words = doc.load_page(page - 1).get_text("words") if (doc is not None and has_text) else None
+                # Two-column page -> split at the gutter and detect each half as a single column.
+                split_px = None
+                if words:
+                    gutter = _column_gutter(words, doc.load_page(page - 1).rect.width)
+                    if gutter is not None:
+                        split_px = int(gutter * (image.get("dpi") or 200) / 72.0)
+                if split_px:
+                    # split path detects + filters per half internally (in each half's coord space)
+                    result = _detect_split_page(image["image_path"], page, split_px, words,
+                                                image.get("dpi") or 200, detect_page_regions, debug, debug_dir)
+                else:
+                    result = detect_page_regions(image["image_path"], page_number=page, debug=debug, debug_dir=debug_dir)
+                    # On a page with a text layer, drop prose/decorative regions (keep only data).
+                    if words is not None and result.get("regions"):
+                        before = len(result["regions"])
+                        result["regions"] = _data_regions(words, result["regions"], image.get("dpi"))
+                        dropped += before - len(result["regions"])
                 page_regions.append(result)
             except Exception as exc:  # noqa: BLE001 - isolate per-page detection failures
                 logger.exception("region detection failed on page %s", page)
@@ -310,6 +508,115 @@ def opencv_detect_regions(state: PDFPipelineState) -> Dict[str, Any]:
     return {"page_regions": page_regions, "errors": errors}
 
 
+def _chart_color_frac(image_path: Optional[str]) -> float:
+    """Fraction of saturated-colour pixels in a crop. Charts (bars/slices/segments) are colour-filled;
+    financial tables are black text on white, so this cheaply flags chart-suspicious crops."""
+    if not image_path:
+        return 0.0
+    try:
+        import cv2  # lazy
+        img = cv2.imread(image_path)
+        if img is None:
+            return 0.0
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        colored = int(((hsv[:, :, 1] > 60) & (hsv[:, :, 2] > 50)).sum())
+        return colored / float(img.shape[0] * img.shape[1])
+    except Exception:  # noqa: BLE001 - colour check is best-effort
+        return 0.0
+
+
+def _words_in_bbox(words, bbox, dpi) -> int:
+    """Count text-layer words inside a crop bbox (bbox is image px at ``dpi``; words are PDF points)."""
+    if not words or not bbox:
+        return 0
+    sc = 72.0 / float(dpi or 200)
+    x0, y0, x1, y1 = [c * sc for c in bbox]
+    return sum(1 for w in words if w[0] >= x0 - 2 and w[2] <= x1 + 2 and w[1] >= y0 - 2 and w[3] <= y1 + 2)
+
+
+def _crop_classifier_enabled() -> bool:
+    """The per-crop vision classifier corrects OpenCV's chart/table label but costs one vision call per
+    ambiguous crop (the bulk of ingest time). OFF by default (trust OpenCV routing, the fast pre-classifier
+    behaviour); set CROP_CLASSIFIER=1 to re-enable it for more accurate chart/table routing at ~2x cost."""
+    return os.getenv("CROP_CLASSIFIER", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_crop_type(crop: Dict[str, Any], n_words: int, model: str, page_class: Optional[str] = None) -> str:
+    """The TRUE type of a crop (table/chart/visual), so it is NAMED and routed correctly. The per-crop
+    vision classifier is OFF by default (crops keep OpenCV's label — the fast pre-classifier behaviour).
+    When re-enabled with CROP_CLASSIFIER=1, cheap skips still avoid a classifier call when the type is
+    already clear, to bound cost:
+      * an OpenCV 'table' on a table_page is almost certainly a table (charts live on chart/mixed/highlights
+        pages), so trust the label and skip the call;
+      * a big dense non-colourful region is clearly a table.
+    'kpi_card' and other types are left untouched."""
+    ctype = crop.get("type")
+    if ctype not in ("table", "visual"):
+        return ctype
+    if not _crop_classifier_enabled():
+        return ctype  # classifier off -> keep OpenCV's routing
+    if ctype == "table" and page_class == "table_page":
+        return ctype  # table region on a table-dense page -> trust OpenCV, skip the classifier call
+    if n_words >= 80 and _chart_color_frac(crop.get("image_path")) < 0.10:
+        return ctype  # clearly a dense table; don't spend a classifier call
+    try:
+        from nodes.ollama_vision_node import classify_region
+
+        res = classify_region(crop["image_path"], model=model)
+    except Exception:  # noqa: BLE001 - a classifier failure must not abort cropping; keep OpenCV's type
+        return ctype
+    if not isinstance(res, dict) or res.get("error"):
+        return ctype
+    verdict = str(res.get("type") or "").strip().lower()
+    if verdict == "chart":
+        return "chart"
+    if verdict == "table":
+        return "table"
+    if verdict in ("figure", "image", "diagram"):
+        return "visual"
+    return ctype
+
+
+def _rename_crops_by_type(crops: List[Dict[str, Any]], finals: List[str], document_name, page) -> int:
+    """Renumber a page's crops by their FINAL type and rename the files on disk (two-phase, so a
+    table_2->table_1 reshuffle never collides). Updates each crop's type/image_path/id in place;
+    returns how many crops changed type."""
+    counters: Dict[str, int] = {}
+    plan: List[tuple] = []
+    for crop, ftype in zip(crops, finals):
+        counters[ftype] = counters.get(ftype, 0) + 1
+        old_path = Path(crop["image_path"])
+        new_path = old_path.with_name(f"{ftype}_{counters[ftype]}.png")
+        new_id = f"{_slug(document_name)}-p{(page or 0):03d}-{ftype}-{counters[ftype]}"
+        plan.append((crop, old_path, new_path, new_id, ftype))
+    # phase 1: stage files that need a different name to a unique temp name
+    for i, (crop, old_path, new_path, new_id, ftype) in enumerate(plan):
+        crop["_stage"] = None
+        if old_path.name != new_path.name and old_path.exists():
+            tmp = old_path.with_name(f"__stage_p{page}_{i}.png")
+            try:
+                os.replace(str(old_path), str(tmp))
+                crop["_stage"] = (tmp, new_path)
+            except OSError:
+                logger.warning("crop rename stage failed: %s", old_path)
+    # phase 2: temp -> final; update records
+    changed = 0
+    for crop, old_path, new_path, new_id, ftype in plan:
+        stage = crop.pop("_stage", None)
+        if stage is not None:
+            tmp, dst = stage
+            try:
+                os.replace(str(tmp), str(dst))
+            except OSError:
+                logger.warning("crop rename finalise failed: %s", dst)
+        if ftype != crop.get("type"):
+            changed += 1
+        crop["type"] = ftype
+        crop["image_path"] = str(new_path)
+        crop["id"] = new_id
+    return changed
+
+
 def crop_regions(state: PDFPipelineState) -> Dict[str, Any]:
     """Stage 1c: crop detected regions and route them to extraction channels."""
     page_regions = state.get("page_regions") or []
@@ -321,6 +628,9 @@ def crop_regions(state: PDFPipelineState) -> Dict[str, Any]:
         "visual_candidates": [],
         "kpi_candidates": [],
         "errors": [],
+    }
+    page_class_by_page = {
+        pc.get("page_number"): pc.get("page_class") for pc in state.get("page_classes") or []
     }
     kpi_pages = {
         pc.get("page_number")
@@ -339,6 +649,11 @@ def crop_regions(state: PDFPipelineState) -> Dict[str, Any]:
 
     document_name = state.get("document_name")
     out_root = str(Path(state["output_dir"]) / "extracted_regions")
+    vision_model = _vision_model()
+    reclassified = 0
+    import fitz  # lazy: text layer used by the dense-table guard
+    doc = fitz.open(state.get("pdf_path")) if state.get("pdf_path") else None
+    dpi_by_page = {im.get("page_number"): im.get("dpi") for im in state.get("page_images") or []}
     region_crops: List[Dict[str, Any]] = []
     table_c: List[Dict[str, Any]] = []
     chart_c: List[Dict[str, Any]] = []
@@ -346,44 +661,56 @@ def crop_regions(state: PDFPipelineState) -> Dict[str, Any]:
     kpi_c: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
 
-    for page_result in page_regions:
-        if not page_result.get("regions"):
-            continue
-        page = page_result.get("page")
-        image_path = _page_image_path(state, page)
-        if not image_path:
-            errors.append({"stage": "region_crop", "message": f"no page image for page {page}", "page_number": page})
-            continue
-        try:
-            crops = _crop_regions(image_path, page_result, out_root, document_name=document_name, source=image_path)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("cropping failed on page %s", page)
-            errors.append({"stage": "region_crop", "message": f"page {page}: {exc}", "page_number": page, "exception_type": type(exc).__name__})
-            continue
-
-        region_crops.extend(crops)
-        for crop in crops:
-            candidate = {
-                "id": crop["id"],
-                "kind": crop["type"],
-                "document_name": document_name,
-                "page_number": crop["page_number"],
-                "source": crop["image_path"],
-                "image_path": crop["image_path"],
-                "confidence": crop["confidence"],
-                "bbox": crop["bbox"],
-                "reason": "opencv_region",
-            }
-            if crop["type"] == "table":
-                table_c.append(candidate)
-            elif crop["type"] == "chart":
-                chart_c.append(candidate)
-            elif crop["type"] == "kpi_card" and _use_kpi():
-                kpi_c.append(candidate)
-            elif crop["type"] == "kpi_card":
+    try:
+        for page_result in page_regions:
+            if not page_result.get("regions"):
                 continue
-            else:
-                visual_c.append(candidate)
+            page = page_result.get("page")
+            image_path = _page_image_path(state, page)
+            if not image_path:
+                errors.append({"stage": "region_crop", "message": f"no page image for page {page}", "page_number": page})
+                continue
+            try:
+                crops = _crop_regions(image_path, page_result, out_root, document_name=document_name, source=image_path)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("cropping failed on page %s", page)
+                errors.append({"stage": "region_crop", "message": f"page {page}: {exc}", "page_number": page, "exception_type": type(exc).__name__})
+                continue
+
+            # Name + route each crop by its TRUE type (the vision classifier decides; dense tables skip it),
+            # then rename the files so charts are chart_N.png and tables table_N.png.
+            words = doc.load_page(page - 1).get_text("words") if (doc is not None and page) else None
+            dpi = dpi_by_page.get(page)
+            pclass = page_class_by_page.get(page)
+            finals = [_resolve_crop_type(c, _words_in_bbox(words, c.get("bbox"), dpi), vision_model, pclass) for c in crops]
+            reclassified += _rename_crops_by_type(crops, finals, document_name, page)
+            region_crops.extend(crops)
+            for crop in crops:
+                ctype = crop["type"]
+                candidate = {
+                    "id": crop["id"],
+                    "kind": ctype,
+                    "document_name": document_name,
+                    "page_number": crop["page_number"],
+                    "source": crop["image_path"],
+                    "image_path": crop["image_path"],
+                    "confidence": crop["confidence"],
+                    "bbox": crop["bbox"],
+                    "reason": "opencv_region",
+                }
+                if ctype == "table":
+                    table_c.append(candidate)
+                elif ctype == "chart":
+                    chart_c.append(candidate)
+                elif ctype == "kpi_card" and _use_kpi():
+                    kpi_c.append(candidate)
+                elif ctype == "kpi_card":
+                    continue
+                else:
+                    visual_c.append(candidate)
+    finally:
+        if doc is not None:
+            doc.close()
 
     # KPI pages with no detected card -> send the whole page to the KPI extractor.
     have_kpi = {c["page_number"] for c in kpi_c}
@@ -403,8 +730,8 @@ def crop_regions(state: PDFPipelineState) -> Dict[str, Any]:
             })
 
     logger.info(
-        "crop_regions: %d crop(s) (tables=%d charts=%d kpis=%d visuals=%d)",
-        len(region_crops), len(table_c), len(chart_c), len(kpi_c), len(visual_c),
+        "crop_regions: %d crop(s) (tables=%d charts=%d kpis=%d visuals=%d); %d reclassified by vision",
+        len(region_crops), len(table_c), len(chart_c), len(kpi_c), len(visual_c), reclassified,
     )
     return {
         "region_crops": region_crops,

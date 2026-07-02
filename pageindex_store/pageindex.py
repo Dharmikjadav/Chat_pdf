@@ -64,6 +64,19 @@ _SEMANTIC_SYNONYMS = {
     "employees": ["headcount", "workforce"],
     "employee": ["headcount", "workforce"],
     "workforce": ["employees", "headcount"],
+    "division": ["segment", "segments", "divisions"],
+    "divisions": ["segment", "segments", "division"],
+    "segment": ["division", "divisions", "segments"],
+    "segments": ["division", "divisions", "segment"],
+    "operating": ["operations", "operational"],
+    "operations": ["operating", "operational"],
+    "operational": ["operating", "operations"],
+    "margin": ["margins"],
+    "margins": ["margin"],
+    "remuneration": ["compensation", "pay"],
+    "compensation": ["remuneration", "pay"],
+    "subsidiary": ["subsidiaries"],
+    "subsidiaries": ["subsidiary"],
 }
 _QUERY_SYNONYMS = {**_ACRONYM_SYNONYMS, **_SEMANTIC_SYNONYMS}
 
@@ -129,6 +142,8 @@ def _chart_to_text(data: Any, title: Optional[str]) -> str:
         for entry in data.get("legend") or []:
             if entry is not None:
                 parts.append(str(entry))
+        if data.get("notes"):
+            parts.append(str(data["notes"]))
     elif data is not None:
         parts.append(str(data))
     return "\n".join(parts).strip()

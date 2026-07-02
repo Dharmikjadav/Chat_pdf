@@ -39,16 +39,19 @@ def get_progress(doc_id: str) -> Optional[ProgressResponse]:
         return None
 
     total_pages = int(row.get("total_pages") or 0)
-    processed_pages = int(row.get("processed_pages") or 0)
+    status = row.get("status", "uploaded")
+    current_page = int(row.get("current_page") or 0)
 
-    if total_pages > 0:
-        progress_percent = round((processed_pages / total_pages) * 100, 2)
-    else:
-        progress_percent = float(row.get("progress_percent") or 0.0)
-
-    if row.get("status") == "completed":
+    # Use the stage-aware percentage stored by compute_progress (which spans all pipeline stages),
+    # NOT processed_pages/total_pages — the latter hits 100% at the end of every single stage.
+    # 100% is shown only when the whole pipeline is complete.
+    if status == "completed":
         progress_percent = 100.0
-        processed_pages = total_pages
+    else:
+        progress_percent = min(float(row.get("progress_percent") or 0.0), 99.0)
+
+    # Keep processed_pages consistent with the overall percentage, so it reaches total only at 100%.
+    processed_pages = int(round(progress_percent / 100.0 * total_pages)) if total_pages else 0
 
     errors = []
     for e in row.get("errors") or []:
@@ -63,12 +66,12 @@ def get_progress(doc_id: str) -> Optional[ProgressResponse]:
 
     return ProgressResponse(
         doc_id=row["doc_id"],
-        status=row.get("status", "uploaded"),
+        status=status,
         total_pages=total_pages,
         processed_pages=processed_pages,
-        current_page=int(row.get("current_page") or processed_pages or 0),
+        current_page=current_page or processed_pages,
         progress_percent=progress_percent,
-        stage=row.get("stage") or row.get("status") or "uploaded",
+        stage=row.get("stage") or status or "uploaded",
         errors=errors,
     )
 

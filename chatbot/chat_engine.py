@@ -20,7 +20,6 @@ __all__ = ["ChatEngine"]
 
 DEFAULT_MODEL = "qwen3:8b"
 _CONTEXT_TYPES = ("text", "table", "chart", "kpi", "fact")
-_SOURCE_PRIORITY = {"fact": 0, "kpi": 1, "table": 2, "chart": 3, "text": 4, "section": 5}
 _FULL_TABLE_RE = re.compile(
     r"\b(full|entire|whole|complete|all rows|all the data|all the values|"
     r"show (?:me )?the table|give (?:me )?the table|list all|full table)\b",
@@ -47,6 +46,7 @@ def _period_variants(token: str) -> set:
     """
     t = re.sub(r"\s+", "", token.lower())
     end = None
+    bare_year = None
     if t.startswith("fy"):
         m = re.search(r"\d{2,4}", t)
         if m:
@@ -57,13 +57,17 @@ def _period_variants(token: str) -> set:
         end = int(b) if len(b) == 4 else 2000 + int(b)
     elif re.fullmatch(r"\d{4}", t):
         end = int(t)
+        bare_year = t  # a calendar-year query ("2023") must also match bare "2023" in content
     if not end:
         return {t}
     yy = end % 100
-    return {
+    variants = {
         f"fy{yy:02d}", f"fy{end}", f"{end - 1}-{yy:02d}", f"{end - 1}-{end}",
         f"{end - 1}/{yy:02d}", f"march31,{end}", f"31,{end}",
     }
+    if bare_year:
+        variants.add(bare_year)
+    return variants
 
 _SYSTEM_PROMPT = (
     "You are an offline document assistant. Answer the user's QUESTION using ONLY the "
@@ -255,6 +259,8 @@ class ChatEngine:
 
         periods = {frozenset(_period_variants(p)) for p in _PERIOD_RE.findall(question)}
         core = set(self.store._core_terms(question))
+        # BM25 position of each pooled node = its keyword-relevance rank (search_keyword is sorted).
+        bm25_rank = {n.get("id"): i for i, n in enumerate(nodes)}
 
         def names_metric(node: Dict[str, Any]) -> bool:
             """The query literally names this table's whole (multi-word) metric title."""
@@ -293,26 +299,83 @@ class ChatEngine:
             if inject:
                 nodes.append(n)
                 have.add(nid)
+                bm25_rank.setdefault(nid, len(bm25_rank))
+
+        # A text/section node the query strongly NAMES (>=2 core title terms) that BM25 also ranked at
+        # the very top is a genuine prose answer (e.g. 'Division-wise performance'). Such a heading is
+        # often just a title, with the figures in sibling sub-sections under the same parent page; pull
+        # those siblings in and keep them adjacent so the prose answer arrives complete.
+        TEXT_PROTECT = 3
+        pulled: Dict[str, tuple] = {}  # child id -> (heading bm25 rank, sibling order): tier-0, adjacent
+        for n in list(nodes):
+            if n.get("node_type") not in ("text", "section"):
+                continue
+            hr = bm25_rank.get(n.get("id"), 99)
+            if hr >= TEXT_PROTECT or not strongly_titled(n):
+                continue
+            # Only a title-only "divider" heading (its data lives in sibling sub-sections) pulls
+            # siblings; a content-bearing note already holds its own answer, so pulling its same-page
+            # neighbours would just add unrelated notes.
+            if len((n.get("content") or "").strip()) > len((n.get("title") or "").strip()) + 40:
+                continue
+            parent = self.store.nodes.get(n.get("parent_id"))
+            if not parent:
+                continue
+            for order, cid in enumerate(parent.get("children") or []):
+                child = self.store.nodes.get(cid)
+                if not child or cid == n.get("id"):
+                    continue
+                if child.get("node_type") in ("text", "section") and child.get("page_number") == n.get("page_number"):
+                    if cid not in have:
+                        nodes.append(child)
+                        have.add(cid)
+                    bm25_rank.setdefault(cid, hr)
+                    pulled.setdefault(cid, (hr, order))
 
         def _key(item):
             idx, node = item
+            nid = node.get("id")
             ntype = node.get("node_type")
             is_table = ntype == "table"
-            src = _SOURCE_PRIORITY.get(ntype, 9)
-            conf = self._node_conf(node)
+            is_text = ntype in ("text", "section")
+            # A strongly-titled text/section node BM25 ranked at the very top (or a sibling pulled in
+            # beside it) is a genuine prose answer; it leads, then the period structured nodes follow
+            # in their original order (so numeric questions keep fronting their clean metric table).
+            protected_text = (
+                is_text and bm25_rank.get(nid, 99) < TEXT_PROTECT and strongly_titled(node)
+            ) or nid in pulled
+            sib = pulled.get(nid, (bm25_rank.get(nid, idx), -1))  # (heading BM25 rank, sibling order)
             if periods:
+                if protected_text:  # tier 0: the prose answer and its siblings, kept together
+                    return (0, sib[0], sib[1])
+                # tier 1: period structured nodes; tier 2: the rest by BM25.
                 hit = self._has_period(node, periods)
                 overlap = self._title_overlap(node, core) if is_table else 0
-                # period nodes first; within them highest title overlap, tables, then source/confidence
-                return (0 if hit else 1, -overlap, 0 if is_table else 1, src, -conf, idx)
-            # no period: BM25 is the primary signal (it already ranks short facts well); only front
-            # a structured node the query names so the whole table/chart beats its own facts.
+                # Rank period nodes first by how many of the query's core terms they actually contain
+                # (coverage), then let the strongest BM25 matches (top k) lead, then the original
+                # table-first / title-overlap fronting. Coverage rescues big, garbled financial-statement
+                # nodes (the consolidated P&L / balance sheet, whose header text is mojibake but whose body
+                # holds every line item) that BM25's length penalty otherwise buries under small dense tables.
+                content_l = (node.get("content") or "").lower()
+                coverage = sum(1 for t in core if t in content_l)
+                return (1 if hit else 2, -coverage, 0 if idx < k else 1, 0 if is_table else 1, -overlap, idx)
+            # no period: BM25 order; front a structured node the query names, a line item, or a
+            # protected prose answer (its siblings kept adjacent).
             is_struct = ntype in ("table", "chart", "kpi")
-            fronted = (is_struct and names_metric(node)) or line_match(node)
-            return (0 if fronted else 1, idx)
+            fronted = (is_struct and names_metric(node)) or line_match(node) or protected_text
+            return (0 if fronted else 1, sib[0] if protected_text else idx, sib[1] if protected_text else 0)
 
-        nodes = [node for _, node in sorted(enumerate(nodes), key=_key)]
-        return nodes[:k]
+        bm25_order = list(nodes)  # BM25 relevance order, before the rerank below
+        ranked = [node for _, node in sorted(enumerate(nodes), key=_key)]
+        result = ranked[:k]
+        # Safety net: if the rerank still dropped a top-3 BM25 match, add it back (no displacement) so a
+        # strongly-matching node is never lost outright from the context.
+        present = {id(n) for n in result}
+        for node in bm25_order[:3]:
+            if id(node) not in present:
+                result.append(node)
+                present.add(id(node))
+        return result
 
     @staticmethod
     def _column_header(col: Any) -> str:
@@ -503,12 +566,12 @@ class ChatEngine:
     def _format_context(self, nodes: List[Dict[str, Any]]):
         blocks: List[str] = []
         used: List[Dict[str, Any]] = []
+        seen: set = set()
         total = 0
-        for index, node in enumerate(nodes, 1):
+        for node in nodes:
             page = node.get("page_number")
             source = node.get("document_name") or node.get("source") or "unknown"
             ntype = node.get("node_type")
-            header = f"[{index}] {ntype} | source: {source}" + (f", page: {page}" if page is not None else "")
             data = (node.get("metadata") or {}).get("data")
             rendered = ""
             if ntype == "table" and isinstance(data, dict):
@@ -517,6 +580,18 @@ class ChatEngine:
                 rendered = self._render_chart(node, data)
             if not rendered.strip():
                 rendered = (node.get("content") or "").strip()
+            # facts carry a trailing "on page N"; drop it so the page is cited once (final line), not per fact.
+            rendered = re.sub(r"\s+on page\s+\d+\s*$", "", rendered, flags=re.IGNORECASE).strip()
+            # skip a node that duplicates one already included (same shareholding fact on two pages, etc.).
+            if ntype == "fact" and isinstance(data, dict):
+                yr = re.search(r"(?:19|20)\d{2}|fy\s?\d{2,4}", str(data.get("period") or "").lower())
+                sig = re.sub(r"\W+", "", f"{data.get('metric')}|{data.get('value')}|{yr.group(0) if yr else ''}".lower())
+            else:
+                sig = re.sub(r"\W+", "", rendered.lower())[:300]
+            if sig and sig in seen:
+                continue
+            seen.add(sig)
+            header = f"[{len(used) + 1}] {ntype} | source: {source}" + (f", page: {page}" if page is not None else "")
             block = f"{header}\n{rendered}"
             if total + len(block) > self.max_context_chars and blocks:
                 break
@@ -565,6 +640,75 @@ class ChatEngine:
             options=options,
         )
         return _strip_think(_content(response))
+
+    @staticmethod
+    def _is_nonanswer(answer: str) -> bool:
+        """True when the model did not really answer: empty, the 'Not found' guardrail, or a degenerate
+        repetition-loop / meta-commentary breakdown (the local model sometimes loops on messy context)."""
+        a = (answer or "").strip().lower()
+        if not a:
+            return True
+        if a.startswith("not found in the document"):
+            return True
+        meta = ("loop of repetition", "your message", "as an ai", "i cannot answer",
+                "technical issue", "i am unable", "i'm unable", "repeated text", "unable to answer")
+        return any(m in a for m in meta) and "(page" not in a
+
+    def _top_result_answer(self, used: List[Dict[str, Any]]) -> str:
+        """Surface the top retrieved result as the answer, so the user gets the most relevant retrieved
+        content instead of 'Not found'. Walks the ranked list and returns the first node that has real
+        content (skips an empty/degenerate top node). Reuses the renderers; no pipeline change."""
+        for node in used:
+            data = (node.get("metadata") or {}).get("data")
+            ntype = node.get("node_type")
+            if ntype == "table" and isinstance(data, dict):
+                body = self._render_table(node, data)
+            elif ntype == "chart" and isinstance(data, dict):
+                body = self._render_chart(node, data)
+            else:
+                body = node.get("content") or ""
+            body = body.strip()
+            if not body:
+                continue
+            page = node.get("page_number")
+            if page is not None and "(page" not in body[-16:].lower():
+                body = f"{body}\n(page {page})"
+            return body
+        return ""
+
+    def _ground_page(self, answer: str, used: List[Dict[str, Any]]) -> str:
+        """Rewrite the trailing '(page N)' citation to the page of the retrieved SOURCE that actually
+        contains the answer. The model picks the page from a context block and often guesses the wrong
+        one; here the page is grounded in the source whose content best matches the answer (distinctive
+        numbers dominate, words back it up). Conservative: only overrides when the model's cited page does
+        NOT hold the answer but another retrieved page does — otherwise the model's citation is kept."""
+        if not used:
+            return answer
+        m = re.search(r"\(\s*page\s+(\d+)", answer, re.IGNORECASE)
+        claimed = int(m.group(1)) if m else None
+        body = re.sub(r"\(\s*page[^)]*\)", " ", answer, flags=re.IGNORECASE)
+        nums = [n.replace(",", "") for n in re.findall(r"\d[\d,]*\.?\d+|\b\d{2,}\b", body) if len(n.replace(",", "")) >= 2]
+        words = set(re.findall(r"[a-z]{4,}", body.lower()))
+
+        def node_score(node: Dict[str, Any]) -> int:
+            text = (node.get("content") or "").lower()
+            text_ns = text.replace(",", "")
+            return sum(5 if len(n) >= 4 else 1 for n in nums if n in text_ns) + sum(1 for w in words if w in text)
+
+        page_score: Dict[Any, int] = {}
+        for node in used:
+            page = node.get("page_number")
+            if page is None:
+                continue
+            page_score[page] = max(page_score.get(page, 0), node_score(node))
+        if not page_score:
+            return answer
+        best_page = max(page_score, key=page_score.get)
+        best_score = page_score[best_page]
+        if best_score <= 0 or page_score.get(claimed, -1) >= best_score:
+            return answer  # the cited page already holds the answer (or nothing matched) -> leave it
+        stripped = re.sub(r"\s*\(\s*page[^)]*\)\s*$", "", answer, flags=re.IGNORECASE).rstrip()
+        return f"{stripped}\n(page {best_page})"
 
     def ask(
         self,
@@ -626,10 +770,14 @@ class ChatEngine:
                 "error": name,
             }
 
-        if not answer:
-            answer = _NO_CONTEXT_MSG
-        elif answer.strip().lower().startswith("not found in the document"):
-            answer = "Not found in the document."  # canonical: never carries a page line
+        # When the model can't give a real answer (empty / "Not found" / a degenerate loop), surface the
+        # top retrieved result instead of telling the user nothing. Only falls back if something was
+        # retrieved; a genuinely empty retrieval still returns the no-context message.
+        if self._is_nonanswer(answer):
+            fallback = self._top_result_answer(used)
+            answer = fallback or (answer.strip() and "Not found in the document.") or _NO_CONTEXT_MSG
+        else:
+            answer = self._ground_page(answer, used)  # cite the page that actually holds the answer
         return {"answer": answer, "sources": sources, "context": context, "model": self.model}
 
 

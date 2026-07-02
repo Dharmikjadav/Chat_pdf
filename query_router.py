@@ -162,7 +162,7 @@ class QueryRoute:
     scores: Dict[str, int]
     expanded_query: str
     matched_keywords: Dict[str, List[str]]
-    top_k_multiplier: int = 1
+    top_k_multiplier: int = 4
 
     def to_dict(self) -> Dict:
         return asdict(self)

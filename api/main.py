@@ -67,6 +67,8 @@ async def post_doc(file: UploadFile = File(...)) -> PostDocResponse:
     await file.seek(0)
 
     doc_id = file_utils.new_doc_id()
+    while storage.upload_dir(doc_id).exists() or storage.get_document(doc_id) is not None:
+        doc_id = file_utils.new_doc_id()  # 8-char ids are short; regenerate on the rare collision
     filename = file_utils.safe_filename(file.filename)
     dest = storage.upload_dir(doc_id) / filename
     file_utils.save_upload(file.file, str(dest))

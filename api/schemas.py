@@ -91,5 +91,5 @@ class Source(BaseModel):
 class AskResponse(BaseModel):
     doc_id: str
     question: str
-    answer: str
+    answer: List[str] = Field(default_factory=list, description="Answer as an array of lines (no \\n).")
     sources: List[Source] = Field(default_factory=list)

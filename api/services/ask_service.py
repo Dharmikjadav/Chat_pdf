@@ -63,4 +63,6 @@ def ask(doc_id: str, question: str, top_k: Optional[int] = None) -> Dict[str, An
             }
         )
 
-    return {"answer": result.get("answer", ""), "sources": sources}
+    # Return the answer as an array of lines (no embedded newlines for API consumers).
+    answer_lines = [ln.rstrip() for ln in str(result.get("answer") or "").splitlines() if ln.strip()]
+    return {"answer": answer_lines, "sources": sources}
